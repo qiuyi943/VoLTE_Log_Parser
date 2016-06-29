@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 #-*- coding: utf-8 -*-
 
-""" 
-Description: This app is used to parse the main log file and get the information of VoLTE video call 
+"""
+Description: This app is used to parse the main log file and get the information of VoLTE video call
 Version-0.4
 Author: yi.qiu
 E-mail:yi.qiu@spreadtrum.com
@@ -65,7 +65,7 @@ class vt_statistics:
         self.br_info = []           #[[time_stamp, bitrate, loss_rate, tmmbr_sent], ...]
         self.enc_info = []          #[[time_stamp, bitrate_act, frame_rate],...]
         self.enc_stat = []          #[min, max, avrg] int(Kbps)
-    
+
     def get_date(self, date_str, is_split = True):
         if is_split:
             if 'A' in date_str:
@@ -78,16 +78,16 @@ class vt_statistics:
             else:
                 date = (date_str).strip()
         return date
-            
+
     def call_ring(self, line):
-        """update the state, when the call is ringing"""                                
+        """update the state, when the call is ringing"""
         temp = line.strip().split('  ')
         #update the call state
         self.state = CALL_RINGING_STATE
         self.ring_time = self.get_date(temp.pop(0), False)
-        
+
     def call_end(self, line):
-        """update the state, when the call is end"""                        
+        """update the state, when the call is end"""
         temp = line.strip().split('  ')
         #update the call state
         self.state = CALL_END_STATE
@@ -108,16 +108,16 @@ class vt_statistics:
             self.enc_stat.append(min(data))
             self.enc_stat.append(max(data))
             self.enc_stat.append(int(sum(data)/len(self.enc_info)))
-            
+
     def get_rx_info(self, line):
-        """get the rx info from the log line and keep it in the list"""        
+        """get the rx info from the log line and keep it in the list"""
         temp = line.strip().split(' = ')
         rxn = int(temp[-1])
         temp2 = temp[-2].strip().split(',')
         seqn = int(temp2[0])
         #insert a new data info into rx_info_list
         self.rx_info_list.append([seqn, rxn])
-        
+
     def get_resolution(self, line):
         """get the video resolution"""
         #if self.resolution == '':
@@ -127,30 +127,30 @@ class vt_statistics:
         elif CALL_RESOLUTION_OR_KEY2 in line:
             temp = line.strip().split(',')
             self.resolution = temp[1] + ', ' + temp[2]
-        
-            
+
+
         #print(self.resolution)
     def get_bitrate_info(self, line):
         """get the bitrate information"""
         data = []
         temp = line.strip().split('  ')
         date = self.get_date(temp.pop(0))
-            
+
         ts = time.mktime(time.strptime(date[0], '%Y-%m-%d %H:%M:%S')) + float(date[1])/1000
         #insert the time stamp
         data.append(ts)
-        
+
         #temp[-1] = ' : _VC_rtcpUtilRunTmmbrFsm2: TMMBR - state:0 dir:1 bitrate_kbps: 0 expected:1 lost:1'
         temp2 = temp[-1].strip().split('bitrate_kbps:')
         temp = temp2[1].strip().split(' ')
         #insert the bitrate in Kbps
         data.append(int(temp.pop(0)))
-        
+
         #temp = ['expected:1', 'lost:1']
         temp2 = (temp.pop(0)).strip().split(':')
         ecnt = float(temp2[1])
         temp2 = (temp.pop(0)).strip().split(':')
-        
+
         lcnt = float(temp2[1])
         #insert the loss rate
         if (lcnt >= ecnt and ecnt > 10):
@@ -159,37 +159,37 @@ class vt_statistics:
             data.append(0.0)
         else:
             data.append(lcnt/ecnt * 100)
-        
+
         #insert the TMMBR value 0
         data.append(0)
-        
+
         self.br_info.append(data)
-        
+
     def get_tmmbr_sent_info(self, line):
         data = []
         temp = line.strip().split('  ')
         date = self.get_date(temp.pop(0))
-            
+
         ts = time.mktime(time.strptime(date[0], '%Y-%m-%d %H:%M:%S')) + float(date[1])/1000
         #insert the time stamp
         data.append(ts)
-        
+
         #temp[-1] = ' : _VC_rtcpUtilRunTmmbrFsm2: TMMBR - state:0->1, dir:1->3, sendTmmbrInKbps:526, step:131, lost_permillage:38, mask:0x80'
         temp2 = temp[-1].strip().split('sendTmmbrInKbps:')
         temp = temp2[-1].strip().split(',')
         tmmbr = int(temp.pop(0))
         step = int(temp.pop(0).strip().split(':')[1])
         lrate = float(temp.pop(0).strip().split(':')[1])/10
-        
+
         if (len(self.br_info) > 0):
             data.append(self.br_info[-1][1])
         else:
             data.append(tmmbr + step)
         data.append(lrate)
         data.append(tmmbr)
-        
+
         self.br_info.append(data)
-        
+
     def get_enc_bitrate_info(self, line):
         data = []
         temp = line.strip().split('  ')
@@ -198,26 +198,26 @@ class vt_statistics:
         ts = time.mktime(time.strptime(date[0], '%Y-%m-%d %H:%M:%S')) + float(date[1])/1000
         #insert the time stamp
         data.append(ts)
-        
+
         #[' 203', '2578 I VideoCallEngineClient: bitrate_act 593187 bps, frame rate 29 fps, start_tm 147652858885, stop_tm 147652858885, enc_tol_size 222816, frame_tol_num 90']
         temp2 = (temp[-1].strip().split('bitrate_act '))[-1]
         #insert the bitrate (Kbps)
         data.append(int(int(temp2.strip().split(' ')[0]) / 1000))  #(bps -> Kbps)
         #insert the frame rate (fps)
         data.append(int(temp2.strip().split(' ')[3]))
-        
+
         self.enc_info.append(data)
         pass
     def get_loss_peek_range(self):
-        """calculate the loss rate of current video call"""        
+        """calculate the loss rate of current video call"""
         if (len(self.rx_info_list) < 2):
             return
-        
+
         temp = [0]
         first_idx = 1
         wrap_cnt = 0
         is_wrap = False
-        
+
         for index in range(1, len(self.rx_info_list), 1):
             seq1 = self.rx_info_list[index-1][0]
             num1 = self.rx_info_list[index-1][1]
@@ -237,32 +237,32 @@ class vt_statistics:
                 # the sequence of RTP is not sequencial, maybe the some logs are lost
                 wrap_cnt = 0
                 self.flag_bad = True
-                continue                
+                continue
 
             if (self.flag_bad or seq1 == seq2):
                 loss = 0
             else:
                 seq2 = seq2 if not is_wrap else (seq2 + 65536)
                 loss = ((seq2 - seq1)-(num2 - num1))/(seq2 - seq1)
-                is_wrap = False                
+                is_wrap = False
 
             if loss < 0:
                 loss = 0
             temp.append(loss * 100)
-        
+
         #bingo, record the most loss range
         index2 = temp.index(max(temp))
         self.loss_range.append(max(temp))
         self.loss_range.append(self.rx_info_list[index2 - 1])  #insert [seq1, num1]
         self.loss_range.append(self.rx_info_list[index2])      #insert [seq2, num2]
         #print('biggest partial loss rate %.2f'%max(temp), '%    range: ',self.loss_range)
-        
+
         #calculate the loss rate of this call
         if (self.flag_bad == False):
             seq1 = self.rx_info_list[0][0]
             num1 = self.rx_info_list[0][1]
             seq2 = self.rx_info_list[-1][0]
-            num2 = self.rx_info_list[-1][1]   
+            num2 = self.rx_info_list[-1][1]
             seq2 = 65536 * wrap_cnt + seq2
             if (seq1 == seq2):
                 self.loss_rate = 0
@@ -280,30 +280,30 @@ class vt_statistics:
                         %(self.loss_range[1][0], self.loss_range[2][0], self.loss_range[0], '%'))
         if (len(self.enc_stat) > 0):
             text.insert(tkinter.END, 'Encode bitrate statistics(Kbps): min:%d  max:%d  avrg:%d\n' \
-                        %(self.enc_stat[0], self.enc_stat[1], self.enc_stat[2]))            
-            
+                        %(self.enc_stat[0], self.enc_stat[1], self.enc_stat[2]))
+
     def export_brinfo2csv(self, file_path):
         if (len(self.br_info) == 0) or (self.tol_num == 0):
             return True
-        
+
         if os.path.exists(file_path):
             open_mode = 'w'
         else:
             open_mode = 'x'
-            
+
         try:
             with open(file_path, open_mode, newline='') as csv_file:
                 writer = csv.writer(csv_file)
                 head = ['time_stamp(ms)', 'bitrate(Kbps)', 'loss_rate(%)', 'tmmbr_sent(Kbps)']
                 writer.writerow(head)
-                
+
                 if (self.call_start_time != '') :
                     date = self.get_date(self.call_start_time)
                     #date = (LOG_YEAR + self.call_start_time).strip().split('.')
-                    ts_first = time.mktime(time.strptime(date[0], '%Y-%m-%d %H:%M:%S')) + float(date[1])/1000                
+                    ts_first = time.mktime(time.strptime(date[0], '%Y-%m-%d %H:%M:%S')) + float(date[1])/1000
                 else :
                     ts_first = self.br_info[0][0]
-                    
+
                 for each_elem in self.br_info:
                     data = each_elem
                     data[0] = int((each_elem[0] - ts_first) * 1000)
@@ -316,12 +316,12 @@ class vt_statistics:
     def export_encinfo2csv(self, file_path):
         if (len(self.enc_info) == 0) or (self.tol_num == 0):
             return True
-        
+
         if os.path.exists(file_path):
             open_mode = 'w'
         else:
             open_mode = 'x'
-            
+
         try:
             with open(file_path, open_mode, newline='') as csv_file:
                 writer = csv.writer(csv_file)
@@ -338,7 +338,7 @@ class vt_statistics:
             tkinter.messagebox.showerror('ERROR', wrong_str)
             return False
 """==============================================================================================================="""
-        
+
 
 
 """========================================list for record all vt call status====================================="""
@@ -347,7 +347,7 @@ class vt_list:
         self.list = []
         self.num = 0
         self.flag = 0
-        
+
     def parse(self, line):
         """parse the main.log"""
         if CALL_START_KEY in line:
@@ -355,7 +355,7 @@ class vt_list:
             elem = vt_statistics()
             self.list.append(elem)
             self.num = self.num + 1
-            elem.call_ring(line)            
+            elem.call_ring(line)
             self.flag = 1
         elif ((CALL_END_KEY in line) or (line == '')):
             if self.flag == 1:
@@ -387,7 +387,7 @@ class vt_list:
                 return
             elem = self.list[self.num - 1]
             elem.get_bitrate_info(line)
-            
+
         elif (CALL_TMMBR_AND_KEY1 in line) and \
              (CALL_TMMBR_AND_KEY2 in line):
             if self.flag == 0:
@@ -399,8 +399,8 @@ class vt_list:
             if self.flag == 0:
                 return
             elem = self.list[self.num - 1]
-            elem.get_enc_bitrate_info(line) 
-            
+            elem.get_enc_bitrate_info(line)
+
     def print_result(self, text):
         """print the result"""
         num = 1
@@ -408,11 +408,11 @@ class vt_list:
             text.insert(tkinter.END, "\n=========================CALL %d=============================\n"%num)
             elem.show(text)
             num = num + 1
-            
+
     def clear_all(self):
         """clear the member para"""
         self.num = 0
-        self.flag = 0        
+        self.flag = 0
         self.list = []
     def export_csv(self, cur_dir):
         """ export csv files"""
@@ -429,10 +429,10 @@ class vt_list:
             if (ret == False):
                 break
             index = index + 1
-            
+
         if (ret):
-            tkinter.messagebox.showinfo('Export CSV', 'Succeed')                
-            
+            tkinter.messagebox.showinfo('Export CSV', 'Succeed')
+
 """==============================================================================================================="""
 
 
@@ -478,14 +478,14 @@ class mainframe:
             cur_dir = cur_dir + i + '/'
         self.report.export_csv(cur_dir)
         pass
-    
+
     def clear_text(self):
         """clear the context in the text"""
         if (self.sdata.is_busy()):
             tkinter.messagebox.showwarning('Save Report', 'It\'s busy now, try it later.')
             return
         self.text.delete(1.0, tkinter.END)
- 
+
     def ask_clear(self):
         """ask whether clear the context in the text"""
         if (self.sdata.is_busy()):
@@ -493,7 +493,7 @@ class mainframe:
             return
         if tkinter.messagebox.askokcancel('Clear Report', 'Are you sure to clear them all?'):
             self.clear_text()
-    
+
     def save_to_file(self):
         """save the report to a file"""
         if (self.sdata.is_busy()):
@@ -518,8 +518,8 @@ class mainframe:
                 pass
             else:
                 self.clear_text()
-                self.text.insert(1.0, "=========================FAIL TO OPEN =========================\n")              
-        
+                self.text.insert(1.0, "=========================FAIL TO OPEN =========================\n")
+
     def create_text(self, top):
         """create the text item"""
         text = tkinter.Text(top)
@@ -534,7 +534,7 @@ class mainframe:
         filemenu.add_command(label="Open Log", command=self.open_and_parse)
         filemenu.add_command(label="Export CSV", command=self.export_csv)
         filemenu.add_command(label="Save Report", command=self.save_to_file)
-        filemenu.add_command(label="Clear Report", command=self.ask_clear) 
+        filemenu.add_command(label="Clear Report", command=self.ask_clear)
         filemenu.add_separator()
         filemenu.add_command(label="Exit", command=top.quit)
         menubar.add_cascade(label="File", menu=filemenu)
@@ -572,7 +572,7 @@ class share_data:
         return self.text
     def get_report_instance(self):
         return self.report
-    
+
 
 """==========================================Managger of the App================================================="""
 
@@ -596,14 +596,14 @@ class mngr:
                             text.insert(1.0, "Open a main log file:\n")
                             text.insert(tkinter.END, '%s\n\n'%log_path)
                             text.insert(4.0, " Processed 0 lines\n")
-                            
+
                             lcnt = 0
                             ecnt = 0
                             while not self.sdata.is_parse_stop():
                                 try:
                                     each_line = log_data.readline()
                                     self.sdata.report.parse(each_line)
-                                
+
                                     if each_line == '':
                                         break;
                                     lcnt = lcnt + 1
@@ -624,10 +624,10 @@ class mngr:
                             pass
                         else:
                             text.delete(1.0, tkinter.END)
-                            text.insert(1.0, "=========================FAIL TO OPEN =========================\n")   
+                            text.insert(1.0, "=========================FAIL TO OPEN =========================\n")
                 self.sdata.clean_busy()
     def run(self):
-        #The mainframe will cause Error when it terminates in one spawned thread instead of the main thread. 
+        #The mainframe will cause Error when it terminates in one spawned thread instead of the main thread.
         #Error: Tcl_AsyncDelete Error Multithreading Python
         #http://stackoverflow.com/questions/27073762/tcl-asyncdelete-error-multithreading-python
         #
@@ -635,11 +635,11 @@ class mngr:
         #thrd_main.start()
         #while(thrd_main.is_alive()):
         #    thrd_main.join()
-        
+
         thrd_parse = threading.Thread(target=self.parse_func, name="parser")
-        thrd_parse.start()        
+        thrd_parse.start()
         mainframe(self.sdata)
-        
+
         self.sdata.set_parse_stop()
         with self.sdata.lock4cond:
             self.sdata.cond.notify()
