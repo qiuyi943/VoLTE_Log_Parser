@@ -3,12 +3,13 @@
 
 """
 Description: This app is used to parse the main log file and get the information of VoLTE video call
-Version-0.4
+Version-0.5
 Author: yi.qiu
 E-mail:yi.qiu@spreadtrum.com
 Date: 2016-02-15
 Date: 2016-03-04
 Date: 2016-04-25
+Date: 2016-10-12
 """
 
 import sys
@@ -44,8 +45,11 @@ CALL_UPLINK_BITRATE_AND_KEY2 = 'bitrate_act'
 CALL_RECV_TMMBR_AND_KEY1 = 'VideoCallEngineClient'
 CALL_RECV_TMMBR_AND_KEY2 = 'VC_EVENT_REMOTE_RECV_BW_KBPS'
 
+CALL_SEND_TMMBN_KEY = 'sendTmmbnInKbps='
+CALL_RECV_TMMBN_KEY = 'recvTmmbnInKbps='
+
 RTP_SEQUENCE_GAP = 2000
-APP_VERSION = 0.4
+APP_VERSION = 0.5
 LOG_YEAR = '2016-'
 """==============================================================================================================="""
 
@@ -62,8 +66,8 @@ class vt_statistics:
         self.rx_info_list = []      #[[SEQn, NUMn], ...]
         self.state = CALL_END_STATE
         self.loss_range = []        #[loss_rate, [SEQ1, NUM1], [SEQ2, NUM2]]
-        self.br_info = []           #[[time_stamp, bitrate, loss_rate, tmmbr_sent], ...]
-        self.enc_info = []          #[[time_stamp, bitrate_act, frame_rate],...]
+        self.br_info = []           #[[time_stamp, bitrate, loss_rate, tmmbr_sent, tmmbn_recv], ...]
+        self.enc_info = []          #[[time_stamp, bitrate_act, frame_rate, tmmbn_sent],...]
         self.enc_stat = []          #[min, max, avrg] int(Kbps)
 
     def get_date(self, date_str, is_split = True):
@@ -160,7 +164,8 @@ class vt_statistics:
         else:
             data.append(lcnt/ecnt * 100)
 
-        #insert the TMMBR value 0
+        #insert the TMMBR & TMMBN value 0
+        data.append(0)
         data.append(0)
 
         self.br_info.append(data)
@@ -187,6 +192,8 @@ class vt_statistics:
             data.append(tmmbr + step)
         data.append(lrate)
         data.append(tmmbr)
+        #tail pos is reserved for tmmbn
+        data.append(0)
 
         self.br_info.append(data)
 
@@ -205,9 +212,58 @@ class vt_statistics:
         data.append(int(int(temp2.strip().split(' ')[0]) / 1000))  #(bps -> Kbps)
         #insert the frame rate (fps)
         data.append(int(temp2.strip().split(' ')[3]))
+        #init tmmbn_sent
+        data.append(0)
 
         self.enc_info.append(data)
         pass
+
+    def get_tmmbn_recv_info(self, line):
+        #merge the info into br_info[]
+        temp = line.strip().split('  ')
+        date = self.get_date(temp.pop(0))
+
+        ts = time.mktime(time.strptime(date[0], '%Y-%m-%d %H:%M:%S')) + float(date[1])/1000
+
+        if len(self.br_info) > 0:
+            if ts == self.br_info[-1][0]:
+                data = self.br_info.pop(-1)
+            else:
+                data = [ts, self.br_info[-1][1], 0, 0, 0]
+        else:
+            #insert the time stamp
+            data = [ts, 0 , 0, 0, 0]
+
+        #[' 312 21955 E VES', '', ' : _VC_rtcpRecv: received TMMBN, recvTmmbnInKbps=515 Kbps']
+        tmmbn = int((temp[-1].split(CALL_RECV_TMMBN_KEY))[-1].split(' ').pop(0))
+        data[-1] = (tmmbn)
+
+        self.br_info.append(data)
+        pass
+
+    def get_tmmbn_sent_info(self, line):
+        #merge the info into enc_info[]
+        temp = line.strip().split('  ')
+        date = self.get_date(temp.pop(0))
+
+        ts = time.mktime(time.strptime(date[0], '%Y-%m-%d %H:%M:%S')) + float(date[1])/1000
+
+        if len(self.enc_info) > 0:
+            if ts == self.enc_info[-1][0]:
+                data = self.enc_info.pop(-1)
+            else:
+                data = [ts, self.enc_info[-1][1], self.enc_info[-1][2],  0]
+        else:
+            #insert the time stamp
+            data = [ts, 0 , 0, 0]
+
+        #[' 312 21955 E VES', '', ' : _VC_rtcpSend: TMMBN sendTmmbnInKbps=303 Kbps']
+        tmmbn = int((temp[-1].split(CALL_SEND_TMMBN_KEY))[-1].split(' ').pop(0))
+        data[-1] = (tmmbn)
+
+        self.enc_info.append(data)
+        pass
+
     def get_loss_peek_range(self):
         """calculate the loss rate of current video call"""
         if (len(self.rx_info_list) < 2):
@@ -269,6 +325,7 @@ class vt_statistics:
             else:
                 self.loss_rate = ((seq2 - seq1)-(num2 - num1))/(seq2 - seq1) * 100
         self.tol_num = num2 - num1
+
     def show(self, text):
         text.insert(tkinter.END, 'Time of preparation: %s\n'%self.ring_time)
         text.insert(tkinter.END, 'Time of start: %s\n'%self.call_start_time)
@@ -294,7 +351,7 @@ class vt_statistics:
         try:
             with open(file_path, open_mode, newline='') as csv_file:
                 writer = csv.writer(csv_file)
-                head = ['time_stamp(ms)', 'bitrate(Kbps)', 'loss_rate(%)', 'tmmbr_sent(Kbps)']
+                head = ['time_stamp(ms)', 'downlink_br(Kbps)', 'loss_rate(%)', 'tmmbr_sent(Kbps)', 'tmmbn_recv(Kbps)']
                 writer.writerow(head)
 
                 if (self.call_start_time != '') :
@@ -325,7 +382,7 @@ class vt_statistics:
         try:
             with open(file_path, open_mode, newline='') as csv_file:
                 writer = csv.writer(csv_file)
-                head = ['time_stamp(ms)', 'bitrate(Kbps)', 'frame_rate(fps)']
+                head = ['time_stamp(ms)', 'bitrate(Kbps)', 'frame_rate(fps)', 'tmmbn_sent(Kbps)']
                 writer.writerow(head)
                 ts_first = self.enc_info[0][0]
                 for each_elem in self.enc_info:
@@ -400,6 +457,16 @@ class vt_list:
                 return
             elem = self.list[self.num - 1]
             elem.get_enc_bitrate_info(line)
+        elif (CALL_RECV_TMMBN_KEY) in line:
+            if self.flag == 0:
+                return
+            elem = self.list[self.num - 1]
+            elem.get_tmmbn_recv_info(line)
+        elif CALL_SEND_TMMBN_KEY in line:
+            if self.flag == 0:
+                return
+            elem = self.list[self.num - 1]
+            elem.get_tmmbn_sent_info(line)
 
     def print_result(self, text):
         """print the result"""
